@@ -36,18 +36,27 @@ functional) 3 req/sec anonymous rate limit that NCBI enforces for
 unauthenticated requests. Nothing breaks; searches just self-limit to a
 slower pace.
 """
-
 import os
 
 try:
     from dotenv import load_dotenv
-
-    load_dotenv()  # loads a .env file in the current directory, if present
+    load_dotenv()
 except ImportError:
-    pass  # python-dotenv not installed - plain environment variables still work
+    pass
 
-NCBI_EMAIL = os.environ.get("NCBI_EMAIL", "")
-NCBI_API_KEY = os.environ.get("NCBI_API_KEY", "")
+
+# First try Streamlit Cloud Secrets
+try:
+    import streamlit as st
+
+    NCBI_EMAIL = st.secrets.get("NCBI_EMAIL", "")
+    NCBI_API_KEY = st.secrets.get("NCBI_API_KEY", "")
+
+except Exception:
+    # Local environment / .env
+    NCBI_EMAIL = os.environ.get("NCBI_EMAIL", "")
+    NCBI_API_KEY = os.environ.get("NCBI_API_KEY", "")
+
 
 if not NCBI_API_KEY:
     print(
@@ -56,3 +65,4 @@ if not NCBI_API_KEY:
         "config.py for how to set it. Get a free key at "
         "https://www.ncbi.nlm.nih.gov/account/settings/"
     )
+
