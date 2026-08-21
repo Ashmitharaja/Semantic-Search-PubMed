@@ -1,0 +1,35 @@
+streamlit>=1.32
+requests>=2.31
+numpy>=1.24
+
+# Real sparse (lexical) BM25 index
+rank_bm25>=0.2.2
+
+# Real dense HNSW approximate-nearest-neighbor index.
+# Using chroma-hnswlib instead of the plain "hnswlib" package: it's Chroma's
+# fork of the same library (identical `import hnswlib` API, same C++ core),
+# but publishes prebuilt wheels for Windows/macOS/Linux across Python 3.9-3.13.
+# Plain "hnswlib" only ships a source tarball on PyPI for recent Python
+# versions, so pip tries to compile it and fails on Windows without
+# Microsoft C++ Build Tools installed. This avoids that entirely.
+chroma-hnswlib>=0.7.3
+
+# Real CPU multi-vector encoder — primary (contextual transformer)
+torch>=2.2
+transformers>=4.40
+
+# Real CPU multi-vector encoder — fallback (static pretrained vectors).
+# Ships as an installable wheel, so it works even when huggingface.co is
+# unreachable (e.g. restricted network environments). encoder.load_encoder()
+# tries the transformer first and falls back to this automatically.
+spacy>=3.7
+# The model itself installs from a GitHub release wheel (not PyPI):
+#   pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_md-3.7.1/en_core_web_md-3.7.1-py3-none-any.whl
+
+# Optional: export the encoder to ONNX + apply real INT8 static/dynamic
+# quantization via onnxruntime for faster CPU inference. Not required to run
+# the app (torch's built-in dynamic quantization, used by default, needs no
+# ONNX export step) — install these only if you run onnx_quantize.py.
+# onnx>=1.16
+# onnxruntime>=1.18
+# optimum[onnxruntime]>=1.19

@@ -1,0 +1,27 @@
+[
+  {
+    "query": "statins for cardiovascular disease prevention in adults",
+    "relevant_pmids": ["27838722"],
+    "_note": "27838722 = 'Statins for Prevention of Cardiovascular Disease in Adults: Evidence Report and Systematic Review for the US Preventive Services Task Force' (2016) — a real, verified PMID directly on-topic for this query. This is ONE seed example, not a complete gold set: a real evaluation needs several relevant PMIDs per query (ideally pulled from a published systematic review's included-studies list, or labeled by a domain expert) to get meaningful Recall@k numbers."
+  },
+  {
+    "query": "clinical trials for lung cancer in elderly patients",
+    "relevant_pmids": [],
+    "_note": "Not yet labeled — fill in with verified relevant PMIDs before trusting metrics for this query."
+  },
+  {
+    "query": "systematic review of exercise for depression in older adults",
+    "relevant_pmids": [],
+    "_note": "Not yet labeled."
+  },
+  {
+    "query": "randomized controlled trial vaccine efficacy covid-19",
+    "relevant_pmids": [],
+    "_note": "Not yet labeled."
+  },
+  {
+    "query": "meta-analysis of diabetes management in adolescents",
+    "relevant_pmids": [],
+    "_note": "Not yet labeled."
+  }
+]
