@@ -58,6 +58,7 @@ import math
 import time
 from dataclasses import dataclass, field
 
+import config
 from ncbi_client import deterministic_parse, esearch, efetch_records
 from encoder import load_encoder
 from vector_cache import VectorCache
@@ -275,8 +276,8 @@ def main():
     parser = argparse.ArgumentParser(description="Evaluate retrieval quality against gold-standard queries.")
     parser.add_argument("--gold-file", type=str, default=None, help="JSON file of {query, relevant_pmids} entries")
     parser.add_argument("--retmax", type=int, default=30, help="Candidates to retrieve per query")
-    parser.add_argument("--email", type=str, default="", help="Contact email for NCBI E-utilities")
-    parser.add_argument("--api-key", type=str, default="", help="NCBI API key (raises rate limit to 10 req/sec)")
+    parser.add_argument("--email", type=str, default=config.NCBI_EMAIL, help="Contact email for NCBI E-utilities (defaults to config.py)")
+    parser.add_argument("--api-key", type=str, default=config.NCBI_API_KEY, help="NCBI API key (defaults to config.py)")
     parser.add_argument("--sparse-weight", type=float, default=0.5, help="BM25 weight in hybrid fusion (0-1)")
     args = parser.parse_args()
 

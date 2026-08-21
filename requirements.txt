@@ -1,6 +1,7 @@
 streamlit>=1.32
 requests>=2.31
 numpy>=1.24
+python-dotenv>=1.0
 
 # Real sparse (lexical) BM25 index
 rank_bm25>=0.2.2
