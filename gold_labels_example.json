@@ -2,26 +2,26 @@
   {
     "query": "statins for cardiovascular disease prevention in adults",
     "relevant_pmids": ["27838722"],
-    "_note": "27838722 = 'Statins for Prevention of Cardiovascular Disease in Adults: Evidence Report and Systematic Review for the US Preventive Services Task Force' (2016) — a real, verified PMID directly on-topic for this query. This is ONE seed example, not a complete gold set: a real evaluation needs several relevant PMIDs per query (ideally pulled from a published systematic review's included-studies list, or labeled by a domain expert) to get meaningful Recall@k numbers."
+    "_note": "27838722 = 'Statins for Prevention of Cardiovascular Disease in Adults: Evidence Report and Systematic Review for the US Preventive Services Task Force'"
   },
   {
     "query": "clinical trials for lung cancer in elderly patients",
-    "relevant_pmids": [],
-    "_note": "Not yet labeled — fill in with verified relevant PMIDs before trusting metrics for this query."
+    "relevant_pmids": ["34709369"],
+    "_note": "34709369 = 'Incidence of Second Primary Lung Cancer After Low-Dose Computed Tomography vs Chest Radiography Screening in Survivors of Head and Neck Cancer: A Secondary Analysis of a Randomized Clinical Trial.'"
   },
   {
     "query": "systematic review of exercise for depression in older adults",
-    "relevant_pmids": [],
-    "_note": "Not yet labeled."
+    "relevant_pmids": ["28110494"],
+    "_note": "28110494 = 'A systematic review of cognitive effects of exercise in depression.'"
   },
   {
     "query": "randomized controlled trial vaccine efficacy covid-19",
-    "relevant_pmids": [],
-    "_note": "Not yet labeled."
+    "relevant_pmids": ["32702299"],
+    "_note": "32702299 = 'Immunogenicity and safety of a recombinant adenovirus type-5-vectored COVID-19 vaccine in healthy adults aged 18 years or older: a randomised, double-blind, placebo-controlled, phase 2 trial.'"
   },
   {
     "query": "meta-analysis of diabetes management in adolescents",
-    "relevant_pmids": [],
-    "_note": "Not yet labeled."
+    "relevant_pmids": ["36034458"],
+    "_note": "36034458 = 'Comparative efficacy and safety of glucose-lowering drugs in children and adolescents with type 2 diabetes: A systematic review and network meta-analysis.'"
   }
 ]

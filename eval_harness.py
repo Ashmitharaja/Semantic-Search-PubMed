@@ -58,6 +58,11 @@ import math
 import time
 from dataclasses import dataclass, field
 
+import matplotlib
+matplotlib.use("Agg")  # headless backend, no display needed
+import matplotlib.pyplot as plt
+import numpy as np
+
 import config
 from ncbi_client import deterministic_parse, esearch, efetch_records
 from encoder import load_encoder
@@ -272,6 +277,83 @@ def print_report(results: list):
     print("=" * 100)
 
 
+def plot_report(results: list, output_path: str = "eval_report.png"):
+    """
+    Grouped bar chart: baseline vs. hybrid, across all four metric families
+    (Precision, Recall, MRR, nDCG), averaged over queries that have gold
+    labels. Bars use the average of P@5/P@10 for Precision and R@5/R@10 for
+    Recall so all four families sit on the same 0-1 scale in one readable
+    chart, alongside per-query detail in a second panel.
+    """
+    labeled = [r for r in results if r.relevant_pmids]
+    if not labeled:
+        print("No labeled queries — skipping chart (nothing to plot).")
+        return
+
+    def avg_metric(pipeline: str, keys: list) -> float:
+        vals = []
+        for r in labeled:
+            for k in keys:
+                v = r.metrics[pipeline][k]
+                if not (isinstance(v, float) and math.isnan(v)):
+                    vals.append(v)
+        return sum(vals) / len(vals) if vals else 0.0
+
+    families = ["Precision", "Recall", "MRR", "nDCG"]
+    baseline_vals = [
+        avg_metric("baseline", ["P@5", "P@10"]),
+        avg_metric("baseline", ["R@5", "R@10"]),
+        avg_metric("baseline", ["MRR"]),
+        avg_metric("baseline", ["nDCG@10"]),
+    ]
+    hybrid_vals = [
+        avg_metric("hybrid", ["P@5", "P@10"]),
+        avg_metric("hybrid", ["R@5", "R@10"]),
+        avg_metric("hybrid", ["MRR"]),
+        avg_metric("hybrid", ["nDCG@10"]),
+    ]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5.5))
+
+    x = np.arange(len(families))
+    width = 0.35
+    bars1 = ax1.bar(x - width / 2, baseline_vals, width, label="Baseline (plain ESearch)", color="#9aa0a6")
+    bars2 = ax1.bar(x + width / 2, hybrid_vals, width, label="Hybrid (BM25+HNSW+MaxSim)", color="#4285F4")
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(families)
+    ax1.set_ylim(0, 1.05)
+    ax1.set_ylabel("Score (0-1)")
+    ax1.set_title(f"Average across {len(labeled)} labeled quer{'y' if len(labeled)==1 else 'ies'}")
+    ax1.legend(loc="upper center", bbox_to_anchor=(0.5, -0.08), ncol=2, fontsize=9, frameon=False)
+    ax1.spines[["top", "right"]].set_visible(False)
+    for bars in (bars1, bars2):
+        for b in bars:
+            h = b.get_height()
+            ax1.annotate(f"{h:.2f}", (b.get_x() + b.get_width() / 2, h),
+                         ha="center", va="bottom", fontsize=8, color="#444441")
+
+    query_labels = [(r.query[:28] + "…") if len(r.query) > 28 else r.query for r in labeled]
+    baseline_ndcg = [r.metrics["baseline"]["nDCG@10"] for r in labeled]
+    hybrid_ndcg = [r.metrics["hybrid"]["nDCG@10"] for r in labeled]
+    yx = np.arange(len(labeled))
+    ax2.barh(yx - width / 2, baseline_ndcg, width, color="#9aa0a6", label="Baseline")
+    ax2.barh(yx + width / 2, hybrid_ndcg, width, color="#4285F4", label="Hybrid")
+    ax2.set_yticks(yx)
+    ax2.set_yticklabels(query_labels, fontsize=9)
+    ax2.set_xlim(0, 1.05)
+    ax2.set_xlabel("nDCG@10")
+    ax2.set_title("Per-query nDCG@10 (higher = more relevant docs ranked higher)")
+    ax2.legend(loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=2, fontsize=9, frameon=False)
+    ax2.spines[["top", "right"]].set_visible(False)
+    ax2.invert_yaxis()
+
+    fig.suptitle("Bio-Lens retrieval quality: baseline vs. hybrid pipeline", fontsize=13, fontweight="medium")
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"\nChart saved to: {output_path}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Evaluate retrieval quality against gold-standard queries.")
     parser.add_argument("--gold-file", type=str, default=None, help="JSON file of {query, relevant_pmids} entries")
@@ -279,6 +361,7 @@ def main():
     parser.add_argument("--email", type=str, default=config.NCBI_EMAIL, help="Contact email for NCBI E-utilities (defaults to config.py)")
     parser.add_argument("--api-key", type=str, default=config.NCBI_API_KEY, help="NCBI API key (defaults to config.py)")
     parser.add_argument("--sparse-weight", type=float, default=0.5, help="BM25 weight in hybrid fusion (0-1)")
+    parser.add_argument("--chart-output", type=str, default="eval_report.png", help="Path to save the comparison chart")
     args = parser.parse_args()
 
     if args.gold_file:
@@ -329,6 +412,7 @@ def main():
 
     cache.save()
     print_report(results)
+    plot_report(results, output_path=args.chart_output)
 
 
 if __name__ == "__main__":

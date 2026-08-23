@@ -62,35 +62,41 @@ AGE_GROUP_MAP = {
 
 
 def deterministic_parse(query: str):
-    """Rule-based, non-AI parser: free text -> structured NCBI Boolean query."""
+    """
+    Rule-based, non-AI parser: free text -> NCBI query + detected metadata.
+
+    Important: detected study-type / age-group phrases are NOT injected as
+    hard AND filters into the retrieval query anymore. Forcing e.g.
+    "Randomized Controlled Trial[pt]" onto the search silently excludes any
+    genuinely relevant paper that doesn't carry that exact publication-type
+    tag in PubMed's own indexing (a systematic review OF RCTs, a review
+    article discussing trials, etc.) — this was empirically confirmed: it
+    zeroed out retrieval entirely for 3 of 5 gold-labeled eval queries. The
+    detected values are still returned for display/transparency, but the
+    query actually sent to ESearch is the broad topic clause only, so the
+    semantic re-ranker gets a real candidate pool to work with instead of an
+    empty one.
+    """
     q_lower = query.lower()
-    clauses = []
     detected = {"study_type": None, "age_group": None}
 
-    for phrase, tag in STUDY_TYPE_MAP.items():
+    for phrase in STUDY_TYPE_MAP:
         if phrase in q_lower:
-            clauses.append(tag)
             detected["study_type"] = phrase
-            q_lower = q_lower.replace(phrase, " ")
             break
 
-    for phrase, tag in AGE_GROUP_MAP.items():
+    for phrase in AGE_GROUP_MAP:
         if phrase in q_lower:
-            clauses.append(tag)
             detected["age_group"] = phrase
-            q_lower = q_lower.replace(phrase, " ")
             break
 
     remainder = re.sub(r"[^a-z0-9\s\-]", " ", q_lower)
     remainder = re.sub(r"\s+", " ", remainder).strip()
     stopwords = {"find", "for", "in", "the", "a", "an", "of", "with", "and", "on"}
     remainder_terms = [w for w in remainder.split() if w not in stopwords and len(w) > 1]
-    topic_clause = None
-    if remainder_terms:
-        topic_clause = f'({" AND ".join(remainder_terms)})[tiab]'
-        clauses.append(topic_clause)
+    topic_clause = f'({" AND ".join(remainder_terms)})[tiab]' if remainder_terms else None
 
-    structured_query = " AND ".join(clauses) if clauses else query
+    structured_query = topic_clause if topic_clause else query
     return structured_query, detected, topic_clause
 
 
