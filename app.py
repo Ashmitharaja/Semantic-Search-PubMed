@@ -1,7 +1,6 @@
 """
-app.py — Bio-Lens with Dedicated "Apply Filters" Sidebar Control
-================================================================
-Explicitly triggers API re-fetches when sidebar parameters change.
+app.py — Bio-Lens with "Search Without Filters" Action
+=====================================================
 """
 
 import math
@@ -24,7 +23,8 @@ from reranker import rerank_late_interaction
 
 # 1. Page Configuration
 st.set_page_config(
-    page_title="Bio-Lens",  
+    page_title="Bio-Lens", 
+    page_icon="🔬", 
     layout="wide", 
     initial_sidebar_state="expanded"
 )
@@ -106,15 +106,14 @@ footer {visibility: hidden;}
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# 3. Sidebar UI Controls & Explicit Apply Button
+# 3. Sidebar UI Controls
 with st.sidebar:
-    st.title("Filters")
+    st.title("🔬 Filters & Controls")
     
-    # DEDICATED APPLY BUTTON
-    apply_filters_clicked = st.button("Apply Filters & Re-search", type="primary", use_container_width=True)
+    apply_filters_clicked = st.button("⚡ Apply Filters & Re-search", type="primary", use_container_width=True)
     st.markdown("---")
     
-    with st.expander("DISPLAY & SORT OPTIONS", expanded=True):
+    with st.expander("⚙️ DISPLAY & SORT OPTIONS", expanded=True):
         sort_by = st.selectbox(
             "Sort by", 
             ["Best match (Bio-Lens AI Rank)", "Most recent", "Publication date", "First author", "Journal"]
@@ -125,7 +124,7 @@ with st.sidebar:
         )
         items_per_page = st.selectbox("Per page", [10, 20, 50, 100], index=0)
 
-    st.markdown("### PubMed Filters")
+    st.markdown("### 🔍 PubMed Filters")
     
     text_availability = st.multiselect("TEXT AVAILABILITY", ["Abstract", "Free full text", "Full text"], default=[])
     has_associated_data = st.checkbox("Associated data")
@@ -179,11 +178,11 @@ with st.sidebar:
     medline_only = st.checkbox("MEDLINE")
 
     st.markdown("---")
-    st.markdown("### Bio-Lens AI Options")
+    st.markdown("### 🤖 Bio-Lens AI Options")
     retmax = st.slider("Candidate Fetch Size (NCBI)", 10, 100, 30, step=10)
     sparse_weight = st.slider("BM25 vs Dense Weight", 0.0, 1.0, 0.5, step=0.1)
 
-# 4. Main Interface Header
+# 4. Main Interface Header & Action Buttons
 st.markdown(
     """
     <div class="hero">
@@ -198,22 +197,30 @@ encoder, _ = get_encoder()
 cache = get_cache()
 
 query = st.text_input("Search", placeholder="Search PubMed by clinical meaning, not just keywords...", label_visibility="collapsed")
-search_clicked = st.button("Search Bio-Lens", use_container_width=True)
+
+col_search, col_raw = st.columns([1, 1])
+with col_search:
+    search_with_filters = st.button("🔍 Search with Filters", use_container_width=True, type="primary")
+with col_raw:
+    search_without_filters = st.button("🌐 Search Without Filters", use_container_width=True)
 
 if "page" not in st.session_state:
     st.session_state.page = 1
 
-def _run_search(query_str: str):
+def _run_search(query_str: str, ignore_filters: bool = False):
     base_q, _, _ = deterministic_parse(query_str)
     
-    full_pubmed_query = build_pubmed_filter_query(
-        base_q, 
-        selected_ages, 
-        species_selection, 
-        sex_selection, 
-        selected_languages,
-        text_availability
-    )
+    if ignore_filters:
+        full_pubmed_query = base_q
+    else:
+        full_pubmed_query = build_pubmed_filter_query(
+            base_q, 
+            selected_ages, 
+            species_selection, 
+            sex_selection, 
+            selected_languages,
+            text_availability
+        )
 
     query_pooled, query_token_vecs = encoder.encode(query_str)
 
@@ -249,27 +256,36 @@ def _run_search(query_str: str):
 
     return rerank_late_interaction(query_token_vecs, candidates, token_map)
 
-# 5. Search Execution (Triggers on Main Search OR Sidebar "Apply Filters")
-must_execute_search = (search_clicked or apply_filters_clicked)
+# 5. Search Execution Router
+must_execute_search = (search_with_filters or apply_filters_clicked or search_without_filters)
 
 if (must_execute_search or "last_results" in st.session_state) and query.strip():
     if must_execute_search:
         st.session_state.page = 1
-        with st.spinner("Applying Selected Filters & Re-indexing..."):
-            st.session_state.last_results = _run_search(query)
+        ignore = True if search_without_filters else False
+        st.session_state.is_unfiltered_run = ignore
+        
+        status_msg = "Running Unfiltered PubMed Search..." if ignore else "Applying Filters & Running AI Search..."
+        with st.spinner(status_msg):
+            st.session_state.last_results = _run_search(query, ignore_filters=ignore)
 
     results = st.session_state.last_results
+    is_unfiltered = st.session_state.get("is_unfiltered_run", False)
 
     filtered = []
     current_year = 2026
     
     for r in results:
+        if is_unfiltered:
+            filtered.append(r)
+            continue
+
         try:
             r_year = int(r.get("year", 0))
         except ValueError:
             r_year = current_year
         
-        # Post-retrieval year checks
+        # Post-retrieval Date Filter
         if date_preset == "1 year" and r_year < (current_year - 1):
             continue
         elif date_preset == "5 years" and r_year < (current_year - 5):
@@ -280,12 +296,12 @@ if (must_execute_search or "last_results" in st.session_state) and query.strip()
             if not (custom_year_range[0] <= r_year <= custom_year_range[1]):
                 continue
 
-        # Post-retrieval Article Types check
+        # Post-retrieval Article Types Filter
         if selected_article_types:
             if not any(pt in r.get("publication_types", []) for pt in selected_article_types):
                 continue
 
-        # Post-retrieval Preprint check
+        # Post-retrieval Exclude Preprints Filter
         if exclude_preprints and "Preprint" in r.get("publication_types", []):
             continue
 
@@ -301,13 +317,16 @@ if (must_execute_search or "last_results" in st.session_state) and query.strip()
 
     # Rendering Results
     if not filtered:
-        st.warning("No records matched your active sidebar filters.")
+        st.warning("No records matched your search parameters.")
     else:
         total_items = len(filtered)
         total_pages = math.ceil(total_items / items_per_page)
         start_idx = (st.session_state.page - 1) * items_per_page
         end_idx = start_idx + items_per_page
         page_items = filtered[start_idx:end_idx]
+
+        if is_unfiltered:
+            st.info("ℹ️ Showing raw, unfiltered PubMed results.")
 
         st.caption(f"Showing {start_idx + 1}-{min(end_idx, total_items)} of {total_items} results (Page {st.session_state.page} of {total_pages})")
 
@@ -340,7 +359,7 @@ if (must_execute_search or "last_results" in st.session_state) and query.strip()
             elif display_format == "PubMed (Inspection Mode)":
                 st.markdown(f'<p class="result-abstract">{rec.get("abstract")}</p>', unsafe_allow_html=True)
                 
-                with st.expander("Detailed PubMed Metadata & Relations"):
+                with st.expander("📋 Detailed PubMed Metadata & Relations"):
                     col1, col2 = st.columns(2)
                     with col1:
                         st.write("**MeSH Terms:**", ", ".join(rec.get("mesh_terms", [])))
