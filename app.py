@@ -1,7 +1,5 @@
 """
-app.py — Bio-Lens with Complete PubMed Feature Set
-===================================================
-Includes Custom Filters, Sort Options, Display Options, and Full Page Navigation.
+app.py — Bio-Lens with Visible PubMed Sidebar & Controls
 """
 
 import math
@@ -17,7 +15,13 @@ from dense_index import DenseIndex
 from hybrid import fuse
 from reranker import rerank_late_interaction
 
-st.set_page_config(page_title="Bio-Lens", page_icon="🔬", layout="wide")
+# Force sidebar to expand by default
+st.set_page_config(
+    page_title="Bio-Lens", 
+    page_icon="🔬", 
+    layout="wide", 
+    initial_sidebar_state="expanded"
+)
 
 @st.cache_resource(show_spinner=False)
 def get_encoder():
@@ -33,31 +37,34 @@ CUSTOM_CSS = """
 footer {visibility: hidden;}
 header {visibility: hidden;}
 
+/* Adjust container spacing */
 .block-container {
-    max-width: 1080px;
-    padding-top: 2rem;
+    max-width: 1100px;
+    padding-top: 1.5rem;
 }
 
+/* Hero Section */
 .hero {
     text-align: center;
-    padding: 1rem 0 1.5rem 0;
+    padding: 0.5rem 0 1.2rem 0;
 }
 .hero h1 {
-    font-size: 2.8rem;
+    font-size: 2.6rem;
     font-weight: 700;
     color: #ffffff;
     margin: 0 0 0.2rem 0;
 }
 .hero .tagline {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     color: #669df6;
     font-weight: 500;
 }
 
+/* PubMed Card Styling */
 .result-card {
     background-color: #131313;
     border: 1px solid #262626;
-    border-radius: 12px;
+    border-radius: 10px;
     padding: 1.2rem 1.4rem;
     margin-bottom: 1rem;
 }
@@ -93,29 +100,31 @@ header {visibility: hidden;}
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# Sidebar Configuration (Custom Filters & Controls)
+# Sidebar UI
 with st.sidebar:
-    st.title("🔬 Bio-Lens Filters")
+    st.markdown("### 🔬 Bio-Lens Filters")
+    st.markdown("---")
     
-    st.subheader("Retrieval Controls")
-    retmax = st.slider("Documents Retrieved", 10, 100, 30, step=10)
-    
-    st.subheader("Custom Filters")
-    year_range = st.slider("Publication Year", 2000, 2026, (2015, 2026))
-    
+    st.markdown("**MY CUSTOM FILTERS**")
     pub_type_filter = st.multiselect(
-        "Publication Types",
+        "Article Type",
         ["Randomized Controlled Trial", "Clinical Trial", "Meta-Analysis", "Systematic Review", "Review", "Journal Article"],
         default=[]
     )
     
-    species_filter = st.selectbox("Species / Subjects", ["All", "Humans Only", "Animals Only"])
-
-    st.subheader("Display & Sort Options")
-    sort_by = st.selectbox("Sort Results By", ["Bio-Lens AI Rank (Semantic)", "Publication Date (Newest First)"])
-    display_mode = st.radio("Display View", ["Summary View", "Full Abstract", "PubMed Inspection Mode"])
+    year_range = st.slider("Publication Date (Years)", 1990, 2026, (2015, 2026))
+    
+    st.markdown("---")
+    st.markdown("**DISPLAY & SORT OPTIONS**")
+    sort_by = st.selectbox("Sort by", ["Bio-Lens AI Rank (Semantic)", "Publication Date (Newest First)"])
+    display_mode = st.radio("Display options", ["Summary View", "Full Abstract", "PubMed Inspection Mode"])
     items_per_page = st.selectbox("Results Per Page", [5, 10, 20], index=1)
+    
+    st.markdown("---")
+    st.markdown("**RETRIEVAL DEPTH**")
+    retmax = st.slider("Candidate Fetch Size", 10, 100, 30, step=10)
 
+# Main Search Interface
 st.markdown(
     """
     <div class="hero">
@@ -177,7 +186,7 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
 
     results = st.session_state.last_results
 
-    # Apply Client-side Custom Filters
+    # Filtering Logic
     filtered = []
     for r in results:
         try:
@@ -199,9 +208,8 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
         filtered.sort(key=lambda x: str(x.get("year", "0")), reverse=True)
 
     if not filtered:
-        st.warning("No records matched your specific filters. Try broadening your criteria.")
+        st.warning("No records matched your active sidebar filters.")
     else:
-        # Pagination Math
         total_items = len(filtered)
         total_pages = math.ceil(total_items / items_per_page)
         start_idx = (st.session_state.page - 1) * items_per_page
@@ -210,7 +218,6 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
 
         st.caption(f"Showing {start_idx + 1}-{min(end_idx, total_items)} of {total_items} results (Page {st.session_state.page} of {total_pages})")
 
-        # Display Results
         for rec in page_items:
             meta_line = f"{rec.get('journal', 'N/A')} · {rec.get('year', 'N/A')} · PMID: {rec['pmid']}"
             badges = "".join([f'<span class="badge">{pt}</span>' for pt in rec.get("publication_types", [])[:3]])
@@ -246,7 +253,7 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
                         st.write("**Related Resources:**", f"[Similar Articles on PubMed](https://pubmed.ncbi.nlm.nih.gov/?linkname=pubmed_pubmed&from_uid={rec['pmid']})")
                 st.markdown("</div>", unsafe_allow_html=True)
 
-        # Pagination UI Controls
+        # Page Navigation Buttons
         col_prev, col_center, col_next = st.columns([1, 3, 1])
         with col_prev:
             if st.session_state.page > 1:
@@ -254,7 +261,7 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
                     st.session_state.page -= 1
                     st.rerun()
         with col_center:
-            st.markdown(f"<div style='text-align:center;'>Page {st.session_state.page} / {total_pages}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align:center;'>Page {st.session_state.page} of {total_pages}</div>", unsafe_allow_html=True)
         with col_next:
             if st.session_state.page < total_pages:
                 if st.button("Next →"):
