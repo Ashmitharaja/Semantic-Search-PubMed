@@ -1,14 +1,17 @@
 """
-app.py — Bio-Lens with Comprehensive PubMed Filters & Display Options
-================================================--------------------
-Combines native PubMed search options with Bio-Lens AI re-ranking.
+app.py — Fully Functional PubMed Semantic Search Engine
 """
 
 import math
 import streamlit as st
 
 import config
-from ncbi_client import deterministic_parse, esearch, efetch_records
+from ncbi_client import (
+    deterministic_parse, 
+    build_pubmed_filter_query, 
+    esearch, 
+    efetch_records
+)
 from encoder import load_encoder
 from vector_cache import VectorCache
 from background_worker import EmbeddingWorkerPool
@@ -33,7 +36,7 @@ def get_encoder():
 def get_cache():
     return VectorCache(path=".vector_cache.pkl")
 
-# 2. Custom CSS - Persistent Sidebar & Native PubMed Look
+# 2. Custom CSS
 CUSTOM_CSS = """
 <style>
 #MainMenu {visibility: hidden;}
@@ -44,12 +47,10 @@ footer {visibility: hidden;}
     min-width: 300px !important;
     max-width: 350px !important;
 }
-
 .block-container {
     max-width: 1100px;
     padding-top: 1rem;
 }
-
 .hero {
     text-align: center;
     padding: 0.5rem 0 1.2rem 0;
@@ -65,7 +66,6 @@ footer {visibility: hidden;}
     color: #669df6;
     font-weight: 500;
 }
-
 .result-card {
     background-color: #131313;
     border: 1px solid #262626;
@@ -105,11 +105,10 @@ footer {visibility: hidden;}
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# 3. Sidebar Setup — Complete PubMed Features & Bio-Lens Options
+# 3. Sidebar UI Controls
 with st.sidebar:
     st.title("🔬 Filters & Controls")
     
-    # --- PUBMED DISPLAY OPTIONS ---
     with st.expander("⚙️ DISPLAY & SORT OPTIONS", expanded=True):
         sort_by = st.selectbox(
             "Sort by", 
@@ -121,36 +120,17 @@ with st.sidebar:
         )
         items_per_page = st.selectbox("Per page", [10, 20, 50, 100], index=0)
 
-    # --- PUBMED FILTERS ---
     st.markdown("### 🔍 PubMed Filters")
     
-    # Text Availability
-    st.markdown("**TEXT AVAILABILITY**")
-    text_availability = st.multiselect(
-        "Text availability", 
-        ["Abstract", "Free full text", "Full text"], 
-        default=[], 
-        label_visibility="collapsed"
-    )
-
-    # Article Attribute
-    st.markdown("**ARTICLE ATTRIBUTE**")
+    text_availability = st.multiselect("TEXT AVAILABILITY", ["Abstract", "Free full text", "Full text"], default=[])
     has_associated_data = st.checkbox("Associated data")
 
-    # Publication Date Quick Selection & Custom Range
     st.markdown("**PUBLICATION DATE**")
-    date_preset = st.radio(
-        "Date Presets", 
-        ["Any time", "1 year", "5 years", "10 years", "Custom Range"], 
-        index=0, 
-        label_visibility="collapsed"
-    )
+    date_preset = st.radio("Date Presets", ["Any time", "1 year", "5 years", "10 years", "Custom Range"], index=0, label_visibility="collapsed")
     custom_year_range = (1990, 2026)
     if date_preset == "Custom Range":
         custom_year_range = st.slider("Select Year Range", 1990, 2026, (2015, 2026))
 
-    # Article Type
-    st.markdown("**ARTICLE TYPE**")
     article_types_list = [
         "Adaptive Clinical Trial", "Address", "Biography", "Books and Documents", 
         "Case Reports", "Clinical Study", "Clinical Trial", "Clinical Trial Protocol", 
@@ -173,33 +153,14 @@ with st.sidebar:
         "Review", "Scoping Review", "Systematic Review", "Twin Study", "Validation Study", 
         "Video-Audio Media", "Webcast"
     ]
-    selected_article_types = st.multiselect("Select Article Types", article_types_list, default=[])
+    selected_article_types = st.multiselect("ARTICLE TYPE", article_types_list, default=[])
 
-    # Article Language
-    st.markdown("**ARTICLE LANGUAGE**")
-    language_list = [
-        "English", "Afrikaans", "Albanian", "Arabic", "Armenian", "Azerbaijani", "Bosnian", 
-        "Bulgarian", "Catalan", "Chinese", "Croatian", "Czech", "Danish", "Dutch", 
-        "Esperanto", "Estonian", "Finnish", "French", "Georgian", "German", "Greek, Modern", 
-        "Hebrew", "Hindi", "Hungarian", "Icelandic", "Indonesian", "Italian", "Japanese", 
-        "Kinyarwanda", "Korean", "Latin", "Latvian", "Lithuanian", "Macedonian", "Malay", 
-        "Malayalam", "Maori", "Multiple Languages", "Norwegian", "Persian", "Polish", 
-        "Portuguese", "Pushto", "Romanian", "Russian", "Sanskrit", "Scottish gaelic", 
-        "Serbian", "Slovak", "Slovenian", "Spanish", "Swedish", "Thai", "Turkish", 
-        "Ukrainian", "Undetermined", "Vietnamese", "Welsh"
-    ]
-    selected_languages = st.multiselect("Select Languages", language_list, default=[])
+    language_list = ["English", "Spanish", "French", "German", "Chinese", "Japanese", "Italian", "Russian"]
+    selected_languages = st.multiselect("ARTICLE LANGUAGE", language_list, default=[])
 
-    # Species
-    st.markdown("**SPECIES**")
-    species_selection = st.multiselect("Select Species", ["Humans", "Other Animals"], default=[])
+    species_selection = st.multiselect("SPECIES", ["Humans", "Other Animals"], default=[])
+    sex_selection = st.multiselect("SEX", ["Female", "Male"], default=[])
 
-    # Sex
-    st.markdown("**SEX**")
-    sex_selection = st.multiselect("Select Sex", ["Female", "Male"], default=[])
-
-    # Age Groups
-    st.markdown("**AGE**")
     age_groups_list = [
         "Child: birth-18 years", "Newborn: birth-1 month", "Infant: birth-23 months", 
         "Infant: 1-23 months", "Preschool Child: 2-5 years", "Child: 6-12 years", 
@@ -207,21 +168,17 @@ with st.sidebar:
         "Adult: 19-44 years", "Middle Aged + Aged: 45+ years", "Middle Aged: 45-64 years", 
         "Aged: 65+ years", "80 and over: 80+ years"
     ]
-    selected_ages = st.multiselect("Select Age Group", age_groups_list, default=[])
+    selected_ages = st.multiselect("AGE", age_groups_list, default=[])
 
-    # Other Options
-    st.markdown("**OTHER**")
     exclude_preprints = st.checkbox("Exclude preprints")
     medline_only = st.checkbox("MEDLINE")
 
-    # --- AI RETRIEVAL PARAMETERS ---
     st.markdown("---")
     st.markdown("### 🤖 Bio-Lens AI Options")
     retmax = st.slider("Candidate Fetch Size (NCBI)", 10, 100, 30, step=10)
     sparse_weight = st.slider("BM25 vs Dense Weight", 0.0, 1.0, 0.5, step=0.1)
 
-
-# 4. Main Search Interface Header
+# 4. Main Interface Header
 st.markdown(
     """
     <div class="hero">
@@ -242,19 +199,33 @@ if "page" not in st.session_state:
     st.session_state.page = 1
 
 def _run_search(query_str: str):
-    structured_query, _, _ = deterministic_parse(query_str)
+    base_q, _, _ = deterministic_parse(query_str)
+    
+    # 1. Build Query with Native PubMed Filters
+    full_pubmed_query = build_pubmed_filter_query(
+        base_q, 
+        selected_ages, 
+        species_selection, 
+        sex_selection, 
+        selected_languages,
+        text_availability
+    )
+
     query_pooled, query_token_vecs = encoder.encode(query_str)
 
+    # 2. Execute NCBI Search
     pmids = esearch(
-        structured_query, retmax=retmax, sort="relevance",
+        full_pubmed_query, retmax=retmax, sort="relevance",
         email=config.NCBI_EMAIL, api_key=config.NCBI_API_KEY,
     )
     if not pmids:
         return []
+        
     records = efetch_records(pmids, email=config.NCBI_EMAIL, api_key=config.NCBI_API_KEY)
     if not records:
         return []
 
+    # 3. Vector & Lexical Hybrid Search + Re-ranking
     bm25_scores = BM25Index(records).score(query_str)
 
     worker = EmbeddingWorkerPool(encoder, cache, max_workers=4)
@@ -267,6 +238,7 @@ def _run_search(query_str: str):
         if r["pmid"] in pooled_map:
             dense_index.add(r["pmid"], pooled_map[r["pmid"]])
     dense_index.save()
+    
     dense_hits = dense_index.search(query_pooled, k=len(dense_index))
     dense_scores = {pmid: s for pmid, s in dense_hits if any(r["pmid"] == pmid for r in records)}
 
@@ -275,17 +247,15 @@ def _run_search(query_str: str):
 
     return rerank_late_interaction(query_token_vecs, candidates, token_map)
 
-
-# 5. Search Execution & Filtering Engine
+# 5. Search Execution & Strict Post-Filtering
 if (search_clicked or "last_results" in st.session_state) and query.strip():
     if search_clicked:
         st.session_state.page = 1
-        with st.spinner("Executing Semantic Search & AI Re-ranking..."):
+        with st.spinner("Applying PubMed Filters & Running AI Re-ranking..."):
             st.session_state.last_results = _run_search(query)
 
     results = st.session_state.last_results
 
-    # Apply Sidebar Filters
     filtered = []
     current_year = 2026
     
@@ -295,7 +265,7 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
         except ValueError:
             r_year = current_year
         
-        # Date Presets Filter
+        # Date Filter
         if date_preset == "1 year" and r_year < (current_year - 1):
             continue
         elif date_preset == "5 years" and r_year < (current_year - 5):
@@ -317,7 +287,7 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
 
         filtered.append(r)
 
-    # Apply Sort Options
+    # Sort Results
     if sort_by == "Most recent" or sort_by == "Publication date":
         filtered.sort(key=lambda x: str(x.get("year", "0")), reverse=True)
     elif sort_by == "First author":
@@ -325,9 +295,9 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
     elif sort_by == "Journal":
         filtered.sort(key=lambda x: str(x.get("journal", "")).lower())
 
-    # Render Results
+    # Render Results UI
     if not filtered:
-        st.warning("No records matched your active PubMed sidebar filters.")
+        st.warning("No records matched your active sidebar filters.")
     else:
         total_items = len(filtered)
         total_pages = math.ceil(total_items / items_per_page)
@@ -338,7 +308,6 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
         st.caption(f"Showing {start_idx + 1}-{min(end_idx, total_items)} of {total_items} results (Page {st.session_state.page} of {total_pages})")
 
         for rec in page_items:
-            # Display Options Logic
             if display_format == "PMID":
                 st.write(f"PMID: {rec['pmid']}")
                 continue
@@ -371,9 +340,8 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
                     col1, col2 = st.columns(2)
                     with col1:
                         st.write("**MeSH Terms:**", ", ".join(rec.get("mesh_terms", [])))
-                        st.write("**Grants & Funding:**", ", ".join(rec.get("grants", [])))
                     with col2:
-                        st.write("**Conflict of Interest:**", rec.get("coi"))
+                        st.write("**Languages:**", ", ".join(rec.get("languages", [])))
                         st.write("**Related Resources:**", f"[Similar Articles on PubMed](https://pubmed.ncbi.nlm.nih.gov/?linkname=pubmed_pubmed&from_uid={rec['pmid']})")
                 st.markdown("</div>", unsafe_allow_html=True)
 
