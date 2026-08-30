@@ -1,5 +1,7 @@
 """
-app.py — Bio-Lens with Visible PubMed Sidebar & Controls
+app.py — Bio-Lens with Fixed Sidebar Controls
+==============================================
+PubMed-like AI Search with persistent side filters and options.
 """
 
 import math
@@ -15,7 +17,7 @@ from dense_index import DenseIndex
 from hybrid import fuse
 from reranker import rerank_late_interaction
 
-# Force sidebar to expand by default
+# 1. Page Configuration
 st.set_page_config(
     page_title="Bio-Lens", 
     page_icon="🔬", 
@@ -31,19 +33,26 @@ def get_encoder():
 def get_cache():
     return VectorCache(path=".vector_cache.pkl")
 
+# 2. Custom CSS - Safe Header & Visible Sidebar Styling
 CUSTOM_CSS = """
 <style>
+/* Hide only the top-right hamburger menu and bottom footer */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-header {visibility: hidden;}
 
-/* Adjust container spacing */
-.block-container {
-    max-width: 1100px;
-    padding-top: 1.5rem;
+/* Force the sidebar to remain displayed and set width */
+[data-testid="stSidebar"] {
+    display: block !important;
+    min-width: 280px !important;
+    max-width: 320px !important;
 }
 
-/* Hero Section */
+/* Page Layout Tweaks */
+.block-container {
+    max-width: 1050px;
+    padding-top: 1rem;
+}
+
 .hero {
     text-align: center;
     padding: 0.5rem 0 1.2rem 0;
@@ -100,9 +109,9 @@ header {visibility: hidden;}
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# Sidebar UI
+# 3. Sidebar UI (PubMed Custom Filters & Controls)
 with st.sidebar:
-    st.markdown("### 🔬 Bio-Lens Filters")
+    st.markdown("## 🔬 PubMed Filters")
     st.markdown("---")
     
     st.markdown("**MY CUSTOM FILTERS**")
@@ -124,7 +133,7 @@ with st.sidebar:
     st.markdown("**RETRIEVAL DEPTH**")
     retmax = st.slider("Candidate Fetch Size", 10, 100, 30, step=10)
 
-# Main Search Interface
+# 4. Main Search Interface Header
 st.markdown(
     """
     <div class="hero">
@@ -178,6 +187,7 @@ def _run_search(query: str):
 
     return rerank_late_interaction(query_token_vecs, candidates, token_map)
 
+# 5. Search Execution & Filtering Results
 if (search_clicked or "last_results" in st.session_state) and query.strip():
     if search_clicked:
         st.session_state.page = 1
@@ -186,7 +196,6 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
 
     results = st.session_state.last_results
 
-    # Filtering Logic
     filtered = []
     for r in results:
         try:
@@ -203,7 +212,6 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
 
         filtered.append(r)
 
-    # Sorting Logic
     if sort_by == "Publication Date (Newest First)":
         filtered.sort(key=lambda x: str(x.get("year", "0")), reverse=True)
 
@@ -253,7 +261,7 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
                         st.write("**Related Resources:**", f"[Similar Articles on PubMed](https://pubmed.ncbi.nlm.nih.gov/?linkname=pubmed_pubmed&from_uid={rec['pmid']})")
                 st.markdown("</div>", unsafe_allow_html=True)
 
-        # Page Navigation Buttons
+        # Pagination controls
         col_prev, col_center, col_next = st.columns([1, 3, 1])
         with col_prev:
             if st.session_state.page > 1:
