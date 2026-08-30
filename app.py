@@ -1,6 +1,5 @@
 """
-app.py — Bio-Lens with "Search Without Filters" Action
-=====================================================
+app.py — Bio-Lens Robust Semantic Search
 """
 
 import math
@@ -106,10 +105,9 @@ footer {visibility: hidden;}
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# 3. Sidebar UI Controls
+# 3. Sidebar Controls
 with st.sidebar:
     st.title("🔬 Filters & Controls")
-    
     apply_filters_clicked = st.button("⚡ Apply Filters & Re-search", type="primary", use_container_width=True)
     st.markdown("---")
     
@@ -125,7 +123,6 @@ with st.sidebar:
         items_per_page = st.selectbox("Per page", [10, 20, 50, 100], index=0)
 
     st.markdown("### 🔍 PubMed Filters")
-    
     text_availability = st.multiselect("TEXT AVAILABILITY", ["Abstract", "Free full text", "Full text"], default=[])
     has_associated_data = st.checkbox("Associated data")
 
@@ -158,10 +155,8 @@ with st.sidebar:
         "Video-Audio Media", "Webcast"
     ]
     selected_article_types = st.multiselect("ARTICLE TYPE", article_types_list, default=[])
-
     language_list = ["English", "Spanish", "French", "German", "Chinese", "Japanese", "Italian", "Russian"]
     selected_languages = st.multiselect("ARTICLE LANGUAGE", language_list, default=[])
-
     species_selection = st.multiselect("SPECIES", ["Humans", "Other Animals"], default=[])
     sex_selection = st.multiselect("SEX", ["Female", "Male"], default=[])
 
@@ -173,7 +168,6 @@ with st.sidebar:
         "Aged: 65+ years", "80 and over: 80+ years"
     ]
     selected_ages = st.multiselect("AGE", age_groups_list, default=[])
-
     exclude_preprints = st.checkbox("Exclude preprints")
     medline_only = st.checkbox("MEDLINE")
 
@@ -182,7 +176,7 @@ with st.sidebar:
     retmax = st.slider("Candidate Fetch Size (NCBI)", 10, 100, 30, step=10)
     sparse_weight = st.slider("BM25 vs Dense Weight", 0.0, 1.0, 0.5, step=0.1)
 
-# 4. Main Interface Header & Action Buttons
+# 4. Header & Action Row
 st.markdown(
     """
     <div class="hero">
@@ -208,13 +202,13 @@ if "page" not in st.session_state:
     st.session_state.page = 1
 
 def _run_search(query_str: str, ignore_filters: bool = False):
-    base_q, _, _ = deterministic_parse(query_str)
+    parsed_q, _, _ = deterministic_parse(query_str)
     
     if ignore_filters:
-        full_pubmed_query = base_q
+        full_pubmed_query = parsed_q
     else:
         full_pubmed_query = build_pubmed_filter_query(
-            base_q, 
+            parsed_q, 
             selected_ages, 
             species_selection, 
             sex_selection, 
@@ -222,12 +216,19 @@ def _run_search(query_str: str, ignore_filters: bool = False):
             text_availability
         )
 
-    query_pooled, query_token_vecs = encoder.encode(query_str)
-
+    # First attempt: search via parsed keywords
     pmids = esearch(
         full_pubmed_query, retmax=retmax, sort="relevance",
         email=config.NCBI_EMAIL, api_key=config.NCBI_API_KEY,
     )
+    
+    # Fallback: if no PMIDs match the exact phrase combination, fallback to parsed terms alone
+    if not pmids and not ignore_filters:
+        pmids = esearch(
+            parsed_q, retmax=retmax, sort="relevance",
+            email=config.NCBI_EMAIL, api_key=config.NCBI_API_KEY,
+        )
+
     if not pmids:
         return []
         
@@ -235,6 +236,7 @@ def _run_search(query_str: str, ignore_filters: bool = False):
     if not records:
         return []
 
+    query_pooled, query_token_vecs = encoder.encode(query_str)
     bm25_scores = BM25Index(records).score(query_str)
 
     worker = EmbeddingWorkerPool(encoder, cache, max_workers=4)
@@ -265,7 +267,7 @@ if (must_execute_search or "last_results" in st.session_state) and query.strip()
         ignore = True if search_without_filters else False
         st.session_state.is_unfiltered_run = ignore
         
-        status_msg = "Running Unfiltered PubMed Search..." if ignore else "Applying Filters & Running AI Search..."
+        status_msg = "Running Unfiltered PubMed Search..." if ignore else "Searching PubMed & AI Reranking..."
         with st.spinner(status_msg):
             st.session_state.last_results = _run_search(query, ignore_filters=ignore)
 
@@ -285,7 +287,6 @@ if (must_execute_search or "last_results" in st.session_state) and query.strip()
         except ValueError:
             r_year = current_year
         
-        # Post-retrieval Date Filter
         if date_preset == "1 year" and r_year < (current_year - 1):
             continue
         elif date_preset == "5 years" and r_year < (current_year - 5):
@@ -296,12 +297,10 @@ if (must_execute_search or "last_results" in st.session_state) and query.strip()
             if not (custom_year_range[0] <= r_year <= custom_year_range[1]):
                 continue
 
-        # Post-retrieval Article Types Filter
         if selected_article_types:
             if not any(pt in r.get("publication_types", []) for pt in selected_article_types):
                 continue
 
-        # Post-retrieval Exclude Preprints Filter
         if exclude_preprints and "Preprint" in r.get("publication_types", []):
             continue
 
@@ -315,7 +314,7 @@ if (must_execute_search or "last_results" in st.session_state) and query.strip()
     elif sort_by == "Journal":
         filtered.sort(key=lambda x: str(x.get("journal", "")).lower())
 
-    # Rendering Results
+    # Render
     if not filtered:
         st.warning("No records matched your search parameters.")
     else:
@@ -368,7 +367,6 @@ if (must_execute_search or "last_results" in st.session_state) and query.strip()
                         st.write("**Related Resources:**", f"[Similar Articles on PubMed](https://pubmed.ncbi.nlm.nih.gov/?linkname=pubmed_pubmed&from_uid={rec['pmid']})")
                 st.markdown("</div>", unsafe_allow_html=True)
 
-        # Pagination Controls
         if display_format != "PMID" and total_pages > 1:
             col_prev, col_center, col_next = st.columns([1, 3, 1])
             with col_prev:

@@ -1,7 +1,8 @@
 """
-ncbi_client.py — NCBI Entrez E-utilities Client with Filter Support
+ncbi_client.py — Enhanced NCBI Entrez E-utilities Client
 """
 
+import re
 import xml.etree.ElementTree as ET
 import requests
 
@@ -25,8 +26,26 @@ AGE_MESH_MAP = {
     "80 and over: 80+ years": '"Aged, 80 and over"[Mesh]',
 }
 
+STOP_WORDS = {
+    "a", "an", "the", "newly", "published", "evaluating", "evaluation", 
+    "study", "trial", "trials", "for", "in", "with", "and", "or", "of", 
+    "to", "on", "at", "by", "from", "about", "is", "are", "was", "were"
+}
+
 def deterministic_parse(query: str) -> tuple[str, str, str]:
-    return query, "", ""
+    """
+    Extracts significant keywords for PubMed keyword searching when given
+    a long, natural language query prompt.
+    """
+    clean_text = re.sub(r'[^\w\s-]', ' ', query)
+    tokens = clean_text.split()
+    
+    # Filter out conversational stop words while preserving medical terms & numbers
+    keywords = [t for t in tokens if t.lower() not in STOP_WORDS]
+    
+    # Fallback to original text if filtering yields empty list
+    parsed_query = " ".join(keywords) if keywords else query
+    return parsed_query, "", ""
 
 def build_pubmed_filter_query(
     base_query: str, 
@@ -36,7 +55,7 @@ def build_pubmed_filter_query(
     languages: list,
     text_avail: list
 ) -> str:
-    """Appends native PubMed search tags to enforce strict API-level filtering."""
+    """Appends PubMed tags to enforce filter constraints."""
     query_parts = [f"({base_query})"]
 
     if ages:
@@ -121,7 +140,6 @@ def efetch_records(pmids: list, email: str = "", api_key: str = "") -> list:
         year_el = article.find(".//JournalIssue/PubDate/Year")
         year = year_el.text if year_el is not None else "2026"
 
-        # Authors
         authors = []
         for author in article.findall(".//Author"):
             last = author.findtext("LastName", "")
@@ -129,13 +147,8 @@ def efetch_records(pmids: list, email: str = "", api_key: str = "") -> list:
             if last:
                 authors.append(f"{last} {fore}".strip())
 
-        # Publication Types
         pub_types = [pt.text for pt in article.findall(".//PublicationType") if pt.text]
-
-        # MeSH Terms
         mesh_terms = [m.findtext("DescriptorName") for m in article.findall(".//MeshHeading") if m.findtext("DescriptorName")]
-
-        # Languages
         langs = [l.text for l in article.findall(".//Language") if l.text]
 
         records.append({
