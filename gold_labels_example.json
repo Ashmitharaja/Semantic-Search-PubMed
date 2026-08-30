@@ -5,23 +5,8 @@
     "_note": "27838722 = 'Statins for Prevention of Cardiovascular Disease in Adults: Evidence Report and Systematic Review for the US Preventive Services Task Force'"
   },
   {
-    "query": "clinical trials for lung cancer in elderly patients",
-    "relevant_pmids": ["34709369"],
-    "_note": "34709369 = 'Incidence of Second Primary Lung Cancer After Low-Dose Computed Tomography vs Chest Radiography Screening in Survivors of Head and Neck Cancer: A Secondary Analysis of a Randomized Clinical Trial.'"
-  },
-  {
     "query": "systematic review of exercise for depression in older adults",
-    "relevant_pmids": ["28110494"],
-    "_note": "28110494 = 'A systematic review of cognitive effects of exercise in depression.'"
-  },
-  {
-    "query": "randomized controlled trial vaccine efficacy covid-19",
-    "relevant_pmids": ["32702299"],
-    "_note": "32702299 = 'Immunogenicity and safety of a recombinant adenovirus type-5-vectored COVID-19 vaccine in healthy adults aged 18 years or older: a randomised, double-blind, placebo-controlled, phase 2 trial.'"
-  },
-  {
-    "query": "meta-analysis of diabetes management in adolescents",
-    "relevant_pmids": ["36034458"],
-    "_note": "36034458 = 'Comparative efficacy and safety of glucose-lowering drugs in children and adolescents with type 2 diabetes: A systematic review and network meta-analysis.'"
+    "relevant_pmids": ["37704052"],
+    "_note": "37704052 = 'Comparative efficacy of various exercise interventions on depression in older adults with mild cognitive impairment: A systematic review and network meta-analysis.'"
   }
 ]

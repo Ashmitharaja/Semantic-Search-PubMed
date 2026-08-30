@@ -41,22 +41,3 @@ def rerank_late_interaction(query_token_vecs: np.ndarray, records: list, token_m
         scored.append(rec)
     scored.sort(key=lambda r: r["late_interaction_score"], reverse=True)
     return scored
-
-if __name__ == "__main__":
-    query = np.array([
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0]
-    ])
-
-    doc = np.array([
-        [1.0, 0.0, 0.0],
-        [0.0, 0.8, 0.6],
-        [0.0, 0.0, 1.0]
-    ])
-
-    # Normalize document vectors
-    doc = doc / np.linalg.norm(doc, axis=1, keepdims=True)
-
-    score = maxsim_score(query, doc)
-
-    print("MaxSim score:", score)

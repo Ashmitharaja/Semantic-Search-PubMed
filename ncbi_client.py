@@ -1,20 +1,7 @@
 """
 ncbi_client.py
 ==============
-Real NCBI E-utilities client.
-
-  - deterministic_parse()  : rule-based free-text -> structured NCBI Boolean query
-                              (Flowchart stages: "Deterministic Parser" +
-                              "Structured Boolean Parameters")
-  - esearch()               : real call to NCBI ESearch ("In-Search API" /
-                              "Sparse / Lexical: Lucene · BM25" — NCBI runs this
-                              internally; we are a client of it, not re-implementing it)
-  - efetch_records()        : real call to NCBI EFetch, returns parsed records
-
-Both network calls are throttled and identify themselves per NCBI's usage policy
-(https://www.ncbi.nlm.nih.gov/books/NBK25497/#chapter2.Usage_Guidelines_and_Requiremen):
-  - `tool` + `email` params on every request
-  - 3 req/sec without an API key, 10 req/sec with one
+Real NCBI E-utilities client optimized for hybrid semantic retrieval (Bio-Lens).
 """
 
 import re
@@ -63,19 +50,8 @@ AGE_GROUP_MAP = {
 
 def deterministic_parse(query: str):
     """
-    Rule-based, non-AI parser: free text -> NCBI query + detected metadata.
-
-    Important: detected study-type / age-group phrases are NOT injected as
-    hard AND filters into the retrieval query anymore. Forcing e.g.
-    "Randomized Controlled Trial[pt]" onto the search silently excludes any
-    genuinely relevant paper that doesn't carry that exact publication-type
-    tag in PubMed's own indexing (a systematic review OF RCTs, a review
-    article discussing trials, etc.) — this was empirically confirmed: it
-    zeroed out retrieval entirely for 3 of 5 gold-labeled eval queries. The
-    detected values are still returned for display/transparency, but the
-    query actually sent to ESearch is the broad topic clause only, so the
-    semantic re-ranker gets a real candidate pool to work with instead of an
-    empty one.
+    Parses natural language input into clean search terms without over-constraining.
+    Removes conversational fluff and avoids forcing [tiab] AND clauses that break recall.
     """
     q_lower = query.lower()
     detected = {"study_type": None, "age_group": None}
@@ -90,19 +66,26 @@ def deterministic_parse(query: str):
             detected["age_group"] = phrase
             break
 
-    remainder = re.sub(r"[^a-z0-9\s\-]", " ", q_lower)
-    remainder = re.sub(r"\s+", " ", remainder).strip()
-    stopwords = {"find", "for", "in", "the", "a", "an", "of", "with", "and", "on"}
-    remainder_terms = [w for w in remainder.split() if w not in stopwords and len(w) > 1]
-    topic_clause = f'({" AND ".join(remainder_terms)})[tiab]' if remainder_terms else None
+    # Strip special characters
+    cleaned = re.sub(r"[^a-z0-9\s\-]", " ", q_lower)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
 
-    structured_query = topic_clause if topic_clause else query
-    return structured_query, detected, topic_clause
+    # Extended stopwords to remove natural language query fluff
+    stopwords = {
+        "find", "for", "in", "the", "a", "an", "of", "with", "and", "on", 
+        "newly", "published", "evaluating", "evaluates", "study", "studies", 
+        "trial", "trials", "paper", "papers", "article", "articles", "show", "showing"
+    }
+
+    words = [w for w in cleaned.split() if w not in stopwords and len(w) > 1]
+    
+    # Construct a space-separated unconstrained query (lets NCBI ATM handle field matching)
+    # This prevents missing papers when abstracts use synonyms like "cognitive impairment" instead of "decline"
+    topic_clause = " ".join(words) if words else query
+
+    return topic_clause, detected, topic_clause
 
 
-# --------------------------------------------------------------------------------------
-# NCBI usage-policy compliance: identification + throttling
-# --------------------------------------------------------------------------------------
 _last_request_time = {"t": 0.0}
 
 
@@ -124,7 +107,7 @@ def _ncbi_params(email: str, api_key: str, extra: dict):
     return params
 
 
-def esearch(term: str, retmax: int = 30, sort: str = "relevance", email: str = "", api_key: str = ""):
+def esearch(term: str, retmax: int = 1000, sort: str = "relevance", email: str = "", api_key: str = ""):
     params = _ncbi_params(
         email, api_key,
         {"db": "pubmed", "term": term, "retmode": "json", "retmax": retmax, "sort": sort},
