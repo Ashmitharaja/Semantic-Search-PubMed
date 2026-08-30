@@ -1,19 +1,10 @@
 """
-app.py — Bio-Lens
-==================
-Frontend: clean, minimal, black background, "Search Beyond Keywords."
-
-NCBI credentials (email / API key) are NOT UI inputs anymore — they live in
-config.py, read from environment variables / a local .env file. The API key
-IS still genuinely used by the real network calls in ncbi_client.py; it's
-just configured once on the machine running the app instead of typed into
-the browser. See config.py and .env.example for how to set it.
-
-The only user-facing control is "Documents retrieved," in the sidebar.
-Everything else (results count, hybrid fusion weight) uses a sensible fixed
-default so the main screen stays uncluttered.
+app.py — Bio-Lens with Complete PubMed Feature Set
+===================================================
+Includes Custom Filters, Sort Options, Display Options, and Full Page Navigation.
 """
 
+import math
 import streamlit as st
 
 import config
@@ -26,22 +17,15 @@ from dense_index import DenseIndex
 from hybrid import fuse
 from reranker import rerank_late_interaction
 
-st.set_page_config(page_title="Bio-Lens", page_icon="🔬", layout="centered")
-
-# Fixed defaults — no longer exposed as UI controls.
-TOP_K = 10
-SPARSE_WEIGHT = 0.5
-
+st.set_page_config(page_title="Bio-Lens", page_icon="🔬", layout="wide")
 
 @st.cache_resource(show_spinner=False)
 def get_encoder():
     return load_encoder(prefer_real=True, quantize=True)
 
-
 @st.cache_resource(show_spinner=False)
 def get_cache():
     return VectorCache(path=".vector_cache.pkl")
-
 
 CUSTOM_CSS = """
 <style>
@@ -50,148 +34,106 @@ footer {visibility: hidden;}
 header {visibility: hidden;}
 
 .block-container {
-    max-width: 720px;
-    padding-top: 3rem;
+    max-width: 1080px;
+    padding-top: 2rem;
 }
 
 .hero {
     text-align: center;
-    padding: 2rem 0 2.5rem 0;
+    padding: 1rem 0 1.5rem 0;
 }
 .hero h1 {
-    font-size: 3.2rem;
+    font-size: 2.8rem;
     font-weight: 700;
     color: #ffffff;
-    margin: 0 0 0.35rem 0;
-    letter-spacing: -0.03em;
+    margin: 0 0 0.2rem 0;
 }
 .hero .tagline {
-    font-size: 1.15rem;
+    font-size: 1.1rem;
     color: #669df6;
     font-weight: 500;
-    margin: 0 0 0.6rem 0;
-}
-.hero .subtitle {
-    font-size: 0.95rem;
-    color: #9aa0a6;
-    font-weight: 400;
-    margin: 0;
-}
-
-div[data-testid="stTextInput"] input {
-    background-color: #ffffff;
-    color: #202124;
-    border-radius: 28px;
-    border: none;
-    padding: 0.95rem 1.4rem;
-    font-size: 1rem;
-    box-shadow: 0 1px 8px rgba(0,0,0,0.45);
-}
-div[data-testid="stTextInput"] input:focus {
-    outline: none;
-    box-shadow: 0 0 0 2px #669df6;
-}
-div[data-testid="stTextInput"] label {
-    display: none;
-}
-
-div[data-testid="stButton"] button {
-    background-color: #4285F4;
-    color: #ffffff;
-    border-radius: 28px;
-    border: none;
-    padding: 0.7rem 2.2rem;
-    font-size: 1rem;
-    font-weight: 500;
-    width: 100%;
-    transition: background-color 0.15s ease, box-shadow 0.15s ease;
-}
-div[data-testid="stButton"] button:hover {
-    background-color: #5a95f5;
-    box-shadow: 0 2px 10px rgba(66,133,244,0.4);
-    color: #ffffff;
-}
-div[data-testid="stButton"] button:active {
-    background-color: #3367d6;
 }
 
 .result-card {
     background-color: #131313;
     border: 1px solid #262626;
-    border-radius: 14px;
-    padding: 1.3rem 1.5rem;
+    border-radius: 12px;
+    padding: 1.2rem 1.4rem;
     margin-bottom: 1rem;
 }
-.result-card a {
+.result-card a.title {
     color: #8ab4f8;
-    font-size: 1.1rem;
-    font-weight: 500;
+    font-size: 1.15rem;
+    font-weight: 600;
     text-decoration: none;
-    line-height: 1.4;
 }
-.result-card a:hover {
+.result-card a.title:hover {
     text-decoration: underline;
 }
 .result-meta {
     color: #9aa0a6;
-    font-size: 0.82rem;
-    margin: 0.35rem 0 0.7rem 0;
+    font-size: 0.85rem;
+    margin: 0.35rem 0 0.6rem 0;
+}
+.badge {
+    background-color: #202124;
+    color: #bdc1c6;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    margin-right: 6px;
+    border: 1px solid #3c4043;
 }
 .result-abstract {
     color: #bdc1c6;
     font-size: 0.93rem;
-    line-height: 1.55;
-    margin: 0;
-}
-.result-count {
-    color: #9aa0a6;
-    font-size: 0.85rem;
-    margin: 0.5rem 0 1.2rem 2px;
-}
-.empty-state {
-    text-align: center;
-    color: #9aa0a6;
-    font-size: 0.95rem;
-    padding: 2rem 0;
-}
-
-section[data-testid="stSidebar"] .sidebar-title {
-    color: #ffffff;
-    font-size: 1rem;
-    font-weight: 500;
-    margin: 0.5rem 0 1.25rem 0;
+    line-height: 1.5;
 }
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
+# Sidebar Configuration (Custom Filters & Controls)
 with st.sidebar:
-    st.markdown('<div class="sidebar-title">Search settings</div>', unsafe_allow_html=True)
-    retmax = st.slider("Documents retrieved", 10, 100, 30, step=10)
+    st.title("🔬 Bio-Lens Filters")
+    
+    st.subheader("Retrieval Controls")
+    retmax = st.slider("Documents Retrieved", 10, 100, 30, step=10)
+    
+    st.subheader("Custom Filters")
+    year_range = st.slider("Publication Year", 2000, 2026, (2015, 2026))
+    
+    pub_type_filter = st.multiselect(
+        "Publication Types",
+        ["Randomized Controlled Trial", "Clinical Trial", "Meta-Analysis", "Systematic Review", "Review", "Journal Article"],
+        default=[]
+    )
+    
+    species_filter = st.selectbox("Species / Subjects", ["All", "Humans Only", "Animals Only"])
+
+    st.subheader("Display & Sort Options")
+    sort_by = st.selectbox("Sort Results By", ["Bio-Lens AI Rank (Semantic)", "Publication Date (Newest First)"])
+    display_mode = st.radio("Display View", ["Summary View", "Full Abstract", "PubMed Inspection Mode"])
+    items_per_page = st.selectbox("Results Per Page", [5, 10, 20], index=1)
 
 st.markdown(
     """
     <div class="hero">
       <h1>Bio-Lens</h1>
-      <div class="tagline">Search Beyond Keywords</div>
-      <div class="subtitle">An AI-Powered Semantic Search Platform for PubMed</div>
+      <div class="tagline">Search Beyond Keywords — AI-Powered Semantic Search for PubMed</div>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-encoder, _is_real_encoder = get_encoder()
+encoder, _ = get_encoder()
 cache = get_cache()
 
-_, mid, _ = st.columns([1, 10, 1])
-with mid:
-    query = st.text_input(
-        "Search",
-        placeholder="Search PubMed by meaning, not just keywords\u2026",
-        label_visibility="collapsed",
-    )
-    search_clicked = st.button("Search")
+query = st.text_input("Search", placeholder="Search PubMed by clinical meaning, not just keywords...", label_visibility="collapsed")
+search_clicked = st.button("Search Bio-Lens", use_container_width=True)
 
+if "page" not in st.session_state:
+    st.session_state.page = 1
 
 def _run_search(query: str):
     structured_query, _, _ = deterministic_parse(query)
@@ -222,35 +164,99 @@ def _run_search(query: str):
     dense_hits = dense_index.search(query_pooled, k=len(dense_index))
     dense_scores = {pmid: s for pmid, s in dense_hits if any(r["pmid"] == pmid for r in records)}
 
-    fused_scores = fuse(bm25_scores, dense_scores, sparse_weight=SPARSE_WEIGHT)
+    fused_scores = fuse(bm25_scores, dense_scores, sparse_weight=0.5)
     candidates = sorted(records, key=lambda r: fused_scores.get(r["pmid"], 0.0), reverse=True)
 
     return rerank_late_interaction(query_token_vecs, candidates, token_map)
 
+if (search_clicked or "last_results" in st.session_state) and query.strip():
+    if search_clicked:
+        st.session_state.page = 1
+        with st.spinner("Executing Semantic Search & AI Re-ranking..."):
+            st.session_state.last_results = _run_search(query)
 
-if search_clicked and query.strip():
-    with st.spinner(""):
-        final_ranked = _run_search(query)
+    results = st.session_state.last_results
 
-    if not final_ranked:
-        st.markdown('<div class="empty-state">No results found. Try rephrasing your search.</div>', unsafe_allow_html=True)
+    # Apply Client-side Custom Filters
+    filtered = []
+    for r in results:
+        try:
+            r_year = int(r.get("year", 0))
+        except ValueError:
+            r_year = 2026
+        
+        if not (year_range[0] <= r_year <= year_range[1]):
+            continue
+            
+        if pub_type_filter:
+            if not any(pt in r.get("publication_types", []) for pt in pub_type_filter):
+                continue
+
+        filtered.append(r)
+
+    # Sorting Logic
+    if sort_by == "Publication Date (Newest First)":
+        filtered.sort(key=lambda x: str(x.get("year", "0")), reverse=True)
+
+    if not filtered:
+        st.warning("No records matched your specific filters. Try broadening your criteria.")
     else:
-        shown = final_ranked[:TOP_K]
-        st.markdown(f'<div class="result-count">{len(shown)} results</div>', unsafe_allow_html=True)
-        for rec in shown:
-            meta_parts = [p for p in [rec.get("journal"), rec.get("year")] if p]
-            meta_line = " · ".join(meta_parts + ([rec["authors"]] if rec.get("authors") else []))
-            abstract = rec.get("abstract") or ""
-            preview = (abstract[:320] + "…") if len(abstract) > 320 else abstract
+        # Pagination Math
+        total_items = len(filtered)
+        total_pages = math.ceil(total_items / items_per_page)
+        start_idx = (st.session_state.page - 1) * items_per_page
+        end_idx = start_idx + items_per_page
+        page_items = filtered[start_idx:end_idx]
+
+        st.caption(f"Showing {start_idx + 1}-{min(end_idx, total_items)} of {total_items} results (Page {st.session_state.page} of {total_pages})")
+
+        # Display Results
+        for rec in page_items:
+            meta_line = f"{rec.get('journal', 'N/A')} · {rec.get('year', 'N/A')} · PMID: {rec['pmid']}"
+            badges = "".join([f'<span class="badge">{pt}</span>' for pt in rec.get("publication_types", [])[:3]])
+
             st.markdown(
                 f"""
                 <div class="result-card">
-                    <a href="{rec['url']}" target="_blank">{rec['title']}</a>
-                    <div class="result-meta">{meta_line}</div>
-                    <p class="result-abstract">{preview}</p>
-                </div>
+                    <a class="title" href="{rec['url']}" target="_blank">{rec['title']}</a>
+                    <div class="result-meta">{meta_line} {badges}</div>
+                    <div class="result-meta"><b>Authors:</b> {rec.get('authors')}</div>
                 """,
-                unsafe_allow_html=True,
+                unsafe_allow_html=True
             )
-elif search_clicked:
-    st.markdown('<div class="empty-state">Enter a search query to begin.</div>', unsafe_allow_html=True)
+
+            if display_mode == "Summary View":
+                abstract = rec.get("abstract", "")
+                preview = (abstract[:280] + "...") if len(abstract) > 280 else abstract
+                st.markdown(f'<p class="result-abstract">{preview}</p></div>', unsafe_allow_html=True)
+
+            elif display_mode == "Full Abstract":
+                st.markdown(f'<p class="result-abstract">{rec.get("abstract")}</p></div>', unsafe_allow_html=True)
+
+            elif display_mode == "PubMed Inspection Mode":
+                st.markdown(f'<p class="result-abstract">{rec.get("abstract")}</p>', unsafe_allow_html=True)
+                
+                with st.expander("📋 Detailed PubMed Metadata & Relations"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write("**MeSH Terms:**", ", ".join(rec.get("mesh_terms", [])))
+                        st.write("**Grants & Funding:**", ", ".join(rec.get("grants", [])))
+                    with col2:
+                        st.write("**Conflict of Interest:**", rec.get("coi"))
+                        st.write("**Related Resources:**", f"[Similar Articles on PubMed](https://pubmed.ncbi.nlm.nih.gov/?linkname=pubmed_pubmed&from_uid={rec['pmid']})")
+                st.markdown("</div>", unsafe_allow_html=True)
+
+        # Pagination UI Controls
+        col_prev, col_center, col_next = st.columns([1, 3, 1])
+        with col_prev:
+            if st.session_state.page > 1:
+                if st.button("← Previous"):
+                    st.session_state.page -= 1
+                    st.rerun()
+        with col_center:
+            st.markdown(f"<div style='text-align:center;'>Page {st.session_state.page} / {total_pages}</div>", unsafe_allow_html=True)
+        with col_next:
+            if st.session_state.page < total_pages:
+                if st.button("Next →"):
+                    st.session_state.page += 1
+                    st.rerun()

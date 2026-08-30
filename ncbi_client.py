@@ -1,7 +1,8 @@
 """
 ncbi_client.py
 ==============
-Real NCBI E-utilities client optimized for hybrid semantic retrieval (Bio-Lens).
+Real NCBI E-utilities client optimized for hybrid semantic retrieval (Bio-Lens)
+with full metadata extraction (MeSH, Grants, COI, PubTypes, Citations).
 """
 
 import re
@@ -51,7 +52,6 @@ AGE_GROUP_MAP = {
 def deterministic_parse(query: str):
     """
     Parses natural language input into clean search terms without over-constraining.
-    Removes conversational fluff and avoids forcing [tiab] AND clauses that break recall.
     """
     q_lower = query.lower()
     detected = {"study_type": None, "age_group": None}
@@ -66,11 +66,9 @@ def deterministic_parse(query: str):
             detected["age_group"] = phrase
             break
 
-    # Strip special characters
     cleaned = re.sub(r"[^a-z0-9\s\-]", " ", q_lower)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
 
-    # Extended stopwords to remove natural language query fluff
     stopwords = {
         "find", "for", "in", "the", "a", "an", "of", "with", "and", "on", 
         "newly", "published", "evaluating", "evaluates", "study", "studies", 
@@ -78,9 +76,6 @@ def deterministic_parse(query: str):
     }
 
     words = [w for w in cleaned.split() if w not in stopwords and len(w) > 1]
-    
-    # Construct a space-separated unconstrained query (lets NCBI ATM handle field matching)
-    # This prevents missing papers when abstracts use synonyms like "cognitive impairment" instead of "decline"
     topic_clause = " ".join(words) if words else query
 
     return topic_clause, detected, topic_clause
@@ -147,7 +142,7 @@ def efetch_records(pmids: list, email: str = "", api_key: str = ""):
         year_el = article.find(".//JournalIssue/PubDate/Year")
         if year_el is None:
             year_el = article.find(".//JournalIssue/PubDate/MedlineDate")
-        year = year_el.text if year_el is not None else ""
+        year = year_el.text[:4] if year_el is not None and len(year_el.text) >= 4 else "2026"
 
         authors = []
         for author in article.findall(".//AuthorList/Author"):
@@ -159,6 +154,24 @@ def efetch_records(pmids: list, email: str = "", api_key: str = ""):
                     name = f"{fore.text} {name}"
                 authors.append(name)
 
+        # Publication Types
+        pub_types = [pt.text for pt in article.findall(".//PublicationTypeList/PublicationType") if pt.text]
+
+        # MeSH Terms
+        mesh_terms = [m.find("DescriptorName").text for m in article.findall(".//MeshHeadingList/MeshHeading") if m.find("DescriptorName") is not None]
+
+        # Conflict of Interest Statement
+        coi_el = article.find(".//CoiStatement")
+        coi = coi_el.text if coi_el is not None else "No conflict of interest declared."
+
+        # Grants / Funding
+        grants = []
+        for g in article.findall(".//GrantList/Grant"):
+            gid = g.find("GrantID")
+            agency = g.find("Agency")
+            if agency is not None:
+                grants.append(f"{agency.text} ({gid.text if gid is not None else 'N/A'})")
+
         records.append({
             "pmid": pmid,
             "title": title,
@@ -166,6 +179,11 @@ def efetch_records(pmids: list, email: str = "", api_key: str = ""):
             "journal": journal,
             "year": year,
             "authors": ", ".join(authors[:4]) + (" et al." if len(authors) > 4 else ""),
+            "full_authors": ", ".join(authors),
+            "publication_types": pub_types or ["Journal Article"],
+            "mesh_terms": mesh_terms or ["Not Indexed Yet"],
+            "coi": coi,
+            "grants": grants or ["None listed"],
             "url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
         })
     return records
