@@ -1,5 +1,7 @@
 """
-app.py — Fully Functional PubMed Semantic Search Engine
+app.py — Bio-Lens with Dedicated "Apply Filters" Sidebar Control
+================================================================
+Explicitly triggers API re-fetches when sidebar parameters change.
 """
 
 import math
@@ -44,8 +46,8 @@ footer {visibility: hidden;}
 
 [data-testid="stSidebar"] {
     display: block !important;
-    min-width: 300px !important;
-    max-width: 350px !important;
+    min-width: 310px !important;
+    max-width: 360px !important;
 }
 .block-container {
     max-width: 1100px;
@@ -105,9 +107,13 @@ footer {visibility: hidden;}
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# 3. Sidebar UI Controls
+# 3. Sidebar UI Controls & Explicit Apply Button
 with st.sidebar:
     st.title("🔬 Filters & Controls")
+    
+    # DEDICATED APPLY BUTTON
+    apply_filters_clicked = st.button("⚡ Apply Filters & Re-search", type="primary", use_container_width=True)
+    st.markdown("---")
     
     with st.expander("⚙️ DISPLAY & SORT OPTIONS", expanded=True):
         sort_by = st.selectbox(
@@ -201,7 +207,6 @@ if "page" not in st.session_state:
 def _run_search(query_str: str):
     base_q, _, _ = deterministic_parse(query_str)
     
-    # 1. Build Query with Native PubMed Filters
     full_pubmed_query = build_pubmed_filter_query(
         base_q, 
         selected_ages, 
@@ -213,7 +218,6 @@ def _run_search(query_str: str):
 
     query_pooled, query_token_vecs = encoder.encode(query_str)
 
-    # 2. Execute NCBI Search
     pmids = esearch(
         full_pubmed_query, retmax=retmax, sort="relevance",
         email=config.NCBI_EMAIL, api_key=config.NCBI_API_KEY,
@@ -225,7 +229,6 @@ def _run_search(query_str: str):
     if not records:
         return []
 
-    # 3. Vector & Lexical Hybrid Search + Re-ranking
     bm25_scores = BM25Index(records).score(query_str)
 
     worker = EmbeddingWorkerPool(encoder, cache, max_workers=4)
@@ -247,11 +250,13 @@ def _run_search(query_str: str):
 
     return rerank_late_interaction(query_token_vecs, candidates, token_map)
 
-# 5. Search Execution & Strict Post-Filtering
-if (search_clicked or "last_results" in st.session_state) and query.strip():
-    if search_clicked:
+# 5. Search Execution (Triggers on Main Search OR Sidebar "Apply Filters")
+must_execute_search = (search_clicked or apply_filters_clicked)
+
+if (must_execute_search or "last_results" in st.session_state) and query.strip():
+    if must_execute_search:
         st.session_state.page = 1
-        with st.spinner("Applying PubMed Filters & Running AI Re-ranking..."):
+        with st.spinner("Applying Selected Filters & Re-indexing..."):
             st.session_state.last_results = _run_search(query)
 
     results = st.session_state.last_results
@@ -265,7 +270,7 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
         except ValueError:
             r_year = current_year
         
-        # Date Filter
+        # Post-retrieval year checks
         if date_preset == "1 year" and r_year < (current_year - 1):
             continue
         elif date_preset == "5 years" and r_year < (current_year - 5):
@@ -276,18 +281,18 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
             if not (custom_year_range[0] <= r_year <= custom_year_range[1]):
                 continue
 
-        # Article Types Filter
+        # Post-retrieval Article Types check
         if selected_article_types:
             if not any(pt in r.get("publication_types", []) for pt in selected_article_types):
                 continue
 
-        # Exclude Preprints Filter
+        # Post-retrieval Preprint check
         if exclude_preprints and "Preprint" in r.get("publication_types", []):
             continue
 
         filtered.append(r)
 
-    # Sort Results
+    # Sorting
     if sort_by == "Most recent" or sort_by == "Publication date":
         filtered.sort(key=lambda x: str(x.get("year", "0")), reverse=True)
     elif sort_by == "First author":
@@ -295,7 +300,7 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
     elif sort_by == "Journal":
         filtered.sort(key=lambda x: str(x.get("journal", "")).lower())
 
-    # Render Results UI
+    # Rendering Results
     if not filtered:
         st.warning("No records matched your active sidebar filters.")
     else:
