@@ -24,8 +24,7 @@ from reranker import rerank_late_interaction
 
 # 1. Page Configuration
 st.set_page_config(
-    page_title="Bio-Lens", 
-    page_icon="🔬", 
+    page_title="Bio-Lens",  
     layout="wide", 
     initial_sidebar_state="expanded"
 )
@@ -109,13 +108,13 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 # 3. Sidebar UI Controls & Explicit Apply Button
 with st.sidebar:
-    st.title("🔬 Filters & Controls")
+    st.title("Filters")
     
     # DEDICATED APPLY BUTTON
-    apply_filters_clicked = st.button("⚡ Apply Filters & Re-search", type="primary", use_container_width=True)
+    apply_filters_clicked = st.button("Apply Filters & Re-search", type="primary", use_container_width=True)
     st.markdown("---")
     
-    with st.expander("⚙️ DISPLAY & SORT OPTIONS", expanded=True):
+    with st.expander("DISPLAY & SORT OPTIONS", expanded=True):
         sort_by = st.selectbox(
             "Sort by", 
             ["Best match (Bio-Lens AI Rank)", "Most recent", "Publication date", "First author", "Journal"]
@@ -126,7 +125,7 @@ with st.sidebar:
         )
         items_per_page = st.selectbox("Per page", [10, 20, 50, 100], index=0)
 
-    st.markdown("### 🔍 PubMed Filters")
+    st.markdown("### PubMed Filters")
     
     text_availability = st.multiselect("TEXT AVAILABILITY", ["Abstract", "Free full text", "Full text"], default=[])
     has_associated_data = st.checkbox("Associated data")
@@ -180,7 +179,7 @@ with st.sidebar:
     medline_only = st.checkbox("MEDLINE")
 
     st.markdown("---")
-    st.markdown("### 🤖 Bio-Lens AI Options")
+    st.markdown("### Bio-Lens AI Options")
     retmax = st.slider("Candidate Fetch Size (NCBI)", 10, 100, 30, step=10)
     sparse_weight = st.slider("BM25 vs Dense Weight", 0.0, 1.0, 0.5, step=0.1)
 
@@ -341,7 +340,7 @@ if (must_execute_search or "last_results" in st.session_state) and query.strip()
             elif display_format == "PubMed (Inspection Mode)":
                 st.markdown(f'<p class="result-abstract">{rec.get("abstract")}</p>', unsafe_allow_html=True)
                 
-                with st.expander("📋 Detailed PubMed Metadata & Relations"):
+                with st.expander("Detailed PubMed Metadata & Relations"):
                     col1, col2 = st.columns(2)
                     with col1:
                         st.write("**MeSH Terms:**", ", ".join(rec.get("mesh_terms", [])))
