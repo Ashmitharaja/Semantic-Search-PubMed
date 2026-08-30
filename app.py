@@ -1,7 +1,7 @@
 """
-app.py — Bio-Lens with Fixed Sidebar Controls
-==============================================
-PubMed-like AI Search with persistent side filters and options.
+app.py — Bio-Lens with Comprehensive PubMed Filters & Display Options
+================================================--------------------
+Combines native PubMed search options with Bio-Lens AI re-ranking.
 """
 
 import math
@@ -33,23 +33,20 @@ def get_encoder():
 def get_cache():
     return VectorCache(path=".vector_cache.pkl")
 
-# 2. Custom CSS - Safe Header & Visible Sidebar Styling
+# 2. Custom CSS - Persistent Sidebar & Native PubMed Look
 CUSTOM_CSS = """
 <style>
-/* Hide only the top-right hamburger menu and bottom footer */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 
-/* Force the sidebar to remain displayed and set width */
 [data-testid="stSidebar"] {
     display: block !important;
-    min-width: 280px !important;
-    max-width: 320px !important;
+    min-width: 300px !important;
+    max-width: 350px !important;
 }
 
-/* Page Layout Tweaks */
 .block-container {
-    max-width: 1050px;
+    max-width: 1100px;
     padding-top: 1rem;
 }
 
@@ -69,11 +66,10 @@ footer {visibility: hidden;}
     font-weight: 500;
 }
 
-/* PubMed Card Styling */
 .result-card {
     background-color: #131313;
     border: 1px solid #262626;
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 1.2rem 1.4rem;
     margin-bottom: 1rem;
 }
@@ -109,29 +105,121 @@ footer {visibility: hidden;}
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# 3. Sidebar UI (PubMed Custom Filters & Controls)
+# 3. Sidebar Setup — Complete PubMed Features & Bio-Lens Options
 with st.sidebar:
-    st.markdown("## 🔬 PubMed Filters")
-    st.markdown("---")
+    st.title("🔬 Filters & Controls")
     
-    st.markdown("**MY CUSTOM FILTERS**")
-    pub_type_filter = st.multiselect(
-        "Article Type",
-        ["Randomized Controlled Trial", "Clinical Trial", "Meta-Analysis", "Systematic Review", "Review", "Journal Article"],
-        default=[]
+    # --- PUBMED DISPLAY OPTIONS ---
+    with st.expander("⚙️ DISPLAY & SORT OPTIONS", expanded=True):
+        sort_by = st.selectbox(
+            "Sort by", 
+            ["Best match (Bio-Lens AI Rank)", "Most recent", "Publication date", "First author", "Journal"]
+        )
+        display_format = st.selectbox(
+            "Format", 
+            ["Summary", "Abstract", "PubMed (Inspection Mode)", "PMID"]
+        )
+        items_per_page = st.selectbox("Per page", [10, 20, 50, 100], index=0)
+
+    # --- PUBMED FILTERS ---
+    st.markdown("### 🔍 PubMed Filters")
+    
+    # Text Availability
+    st.markdown("**TEXT AVAILABILITY**")
+    text_availability = st.multiselect(
+        "Text availability", 
+        ["Abstract", "Free full text", "Full text"], 
+        default=[], 
+        label_visibility="collapsed"
     )
-    
-    year_range = st.slider("Publication Date (Years)", 1990, 2026, (2015, 2026))
-    
+
+    # Article Attribute
+    st.markdown("**ARTICLE ATTRIBUTE**")
+    has_associated_data = st.checkbox("Associated data")
+
+    # Publication Date Quick Selection & Custom Range
+    st.markdown("**PUBLICATION DATE**")
+    date_preset = st.radio(
+        "Date Presets", 
+        ["Any time", "1 year", "5 years", "10 years", "Custom Range"], 
+        index=0, 
+        label_visibility="collapsed"
+    )
+    custom_year_range = (1990, 2026)
+    if date_preset == "Custom Range":
+        custom_year_range = st.slider("Select Year Range", 1990, 2026, (2015, 2026))
+
+    # Article Type
+    st.markdown("**ARTICLE TYPE**")
+    article_types_list = [
+        "Adaptive Clinical Trial", "Address", "Biography", "Books and Documents", 
+        "Case Reports", "Clinical Study", "Clinical Trial", "Clinical Trial Protocol", 
+        "Clinical Trial, Phase I", "Clinical Trial, Phase II", "Clinical Trial, Phase III", 
+        "Clinical Trial, Phase IV", "Clinical Trial, Veterinary", "Collected Work", 
+        "Comment", "Comparative Study", "Conference Proceedings", "Consensus Statement", 
+        "Controlled Clinical Trial", "Corrected and Republished Article", "Dataset", 
+        "Duplicate Publication", "Editorial", "Electronic Supplementary Materials", 
+        "English Abstract", "Equivalence Trial", "Evaluation Study", "Evidence Synthesis", 
+        "Expression of Concern", "Festschrift", "Guideline", "Historical Article", 
+        "Interview", "Introductory Journal Article", "Lecture", "Letter", "Meta-Analysis", 
+        "Multicenter Study", "Network Meta-Analysis", "News", "Observational Study", 
+        "Observational Study, Veterinary", "Patient Education Handout", "Personal Narrative", 
+        "Practice Guideline", "Pragmatic Clinical Trial", "Preprint", "Published Erratum", 
+        "Randomized Controlled Trial", "Randomized Controlled Trial, Veterinary", 
+        "Research Support, American Recovery and Reinvestment Act", "Research Support, N.I.H., Extramural", 
+        "Research Support, N.I.H., Intramural", "Research Support, Non-U.S. Gov't", 
+        "Research Support, U.S. Gov't, Non-P.H.S.", "Research Support, U.S. Gov't, P.H.S.", 
+        "Research Support, U.S. Gov't", "Retracted Publication", "Retraction Notice", 
+        "Review", "Scoping Review", "Systematic Review", "Twin Study", "Validation Study", 
+        "Video-Audio Media", "Webcast"
+    ]
+    selected_article_types = st.multiselect("Select Article Types", article_types_list, default=[])
+
+    # Article Language
+    st.markdown("**ARTICLE LANGUAGE**")
+    language_list = [
+        "English", "Afrikaans", "Albanian", "Arabic", "Armenian", "Azerbaijani", "Bosnian", 
+        "Bulgarian", "Catalan", "Chinese", "Croatian", "Czech", "Danish", "Dutch", 
+        "Esperanto", "Estonian", "Finnish", "French", "Georgian", "German", "Greek, Modern", 
+        "Hebrew", "Hindi", "Hungarian", "Icelandic", "Indonesian", "Italian", "Japanese", 
+        "Kinyarwanda", "Korean", "Latin", "Latvian", "Lithuanian", "Macedonian", "Malay", 
+        "Malayalam", "Maori", "Multiple Languages", "Norwegian", "Persian", "Polish", 
+        "Portuguese", "Pushto", "Romanian", "Russian", "Sanskrit", "Scottish gaelic", 
+        "Serbian", "Slovak", "Slovenian", "Spanish", "Swedish", "Thai", "Turkish", 
+        "Ukrainian", "Undetermined", "Vietnamese", "Welsh"
+    ]
+    selected_languages = st.multiselect("Select Languages", language_list, default=[])
+
+    # Species
+    st.markdown("**SPECIES**")
+    species_selection = st.multiselect("Select Species", ["Humans", "Other Animals"], default=[])
+
+    # Sex
+    st.markdown("**SEX**")
+    sex_selection = st.multiselect("Select Sex", ["Female", "Male"], default=[])
+
+    # Age Groups
+    st.markdown("**AGE**")
+    age_groups_list = [
+        "Child: birth-18 years", "Newborn: birth-1 month", "Infant: birth-23 months", 
+        "Infant: 1-23 months", "Preschool Child: 2-5 years", "Child: 6-12 years", 
+        "Adolescent: 13-18 years", "Adult: 19+ years", "Young Adult: 19-24 years", 
+        "Adult: 19-44 years", "Middle Aged + Aged: 45+ years", "Middle Aged: 45-64 years", 
+        "Aged: 65+ years", "80 and over: 80+ years"
+    ]
+    selected_ages = st.multiselect("Select Age Group", age_groups_list, default=[])
+
+    # Other Options
+    st.markdown("**OTHER**")
+    exclude_preprints = st.checkbox("Exclude preprints")
+    medline_only = st.checkbox("MEDLINE")
+
+    # --- AI RETRIEVAL PARAMETERS ---
     st.markdown("---")
-    st.markdown("**DISPLAY & SORT OPTIONS**")
-    sort_by = st.selectbox("Sort by", ["Bio-Lens AI Rank (Semantic)", "Publication Date (Newest First)"])
-    display_mode = st.radio("Display options", ["Summary View", "Full Abstract", "PubMed Inspection Mode"])
-    items_per_page = st.selectbox("Results Per Page", [5, 10, 20], index=1)
-    
-    st.markdown("---")
-    st.markdown("**RETRIEVAL DEPTH**")
-    retmax = st.slider("Candidate Fetch Size", 10, 100, 30, step=10)
+    st.markdown("### 🤖 Bio-Lens AI Options")
+    retmax = st.slider("Candidate Fetch Size (NCBI)", 10, 100, 30, step=10)
+    sparse_weight = st.slider("BM25 vs Dense Weight", 0.0, 1.0, 0.5, step=0.1)
+
 
 # 4. Main Search Interface Header
 st.markdown(
@@ -153,9 +241,9 @@ search_clicked = st.button("Search Bio-Lens", use_container_width=True)
 if "page" not in st.session_state:
     st.session_state.page = 1
 
-def _run_search(query: str):
-    structured_query, _, _ = deterministic_parse(query)
-    query_pooled, query_token_vecs = encoder.encode(query)
+def _run_search(query_str: str):
+    structured_query, _, _ = deterministic_parse(query_str)
+    query_pooled, query_token_vecs = encoder.encode(query_str)
 
     pmids = esearch(
         structured_query, retmax=retmax, sort="relevance",
@@ -167,7 +255,7 @@ def _run_search(query: str):
     if not records:
         return []
 
-    bm25_scores = BM25Index(records).score(query)
+    bm25_scores = BM25Index(records).score(query_str)
 
     worker = EmbeddingWorkerPool(encoder, cache, max_workers=4)
     pooled_map, token_map, _, _, _ = worker.ensure_embedded(records)
@@ -182,12 +270,13 @@ def _run_search(query: str):
     dense_hits = dense_index.search(query_pooled, k=len(dense_index))
     dense_scores = {pmid: s for pmid, s in dense_hits if any(r["pmid"] == pmid for r in records)}
 
-    fused_scores = fuse(bm25_scores, dense_scores, sparse_weight=0.5)
+    fused_scores = fuse(bm25_scores, dense_scores, sparse_weight=sparse_weight)
     candidates = sorted(records, key=lambda r: fused_scores.get(r["pmid"], 0.0), reverse=True)
 
     return rerank_late_interaction(query_token_vecs, candidates, token_map)
 
-# 5. Search Execution & Filtering Results
+
+# 5. Search Execution & Filtering Engine
 if (search_clicked or "last_results" in st.session_state) and query.strip():
     if search_clicked:
         st.session_state.page = 1
@@ -196,27 +285,49 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
 
     results = st.session_state.last_results
 
+    # Apply Sidebar Filters
     filtered = []
+    current_year = 2026
+    
     for r in results:
         try:
             r_year = int(r.get("year", 0))
         except ValueError:
-            r_year = 2026
+            r_year = current_year
         
-        if not (year_range[0] <= r_year <= year_range[1]):
+        # Date Presets Filter
+        if date_preset == "1 year" and r_year < (current_year - 1):
             continue
-            
-        if pub_type_filter:
-            if not any(pt in r.get("publication_types", []) for pt in pub_type_filter):
+        elif date_preset == "5 years" and r_year < (current_year - 5):
+            continue
+        elif date_preset == "10 years" and r_year < (current_year - 10):
+            continue
+        elif date_preset == "Custom Range":
+            if not (custom_year_range[0] <= r_year <= custom_year_range[1]):
                 continue
+
+        # Article Types Filter
+        if selected_article_types:
+            if not any(pt in r.get("publication_types", []) for pt in selected_article_types):
+                continue
+
+        # Exclude Preprints Filter
+        if exclude_preprints and "Preprint" in r.get("publication_types", []):
+            continue
 
         filtered.append(r)
 
-    if sort_by == "Publication Date (Newest First)":
+    # Apply Sort Options
+    if sort_by == "Most recent" or sort_by == "Publication date":
         filtered.sort(key=lambda x: str(x.get("year", "0")), reverse=True)
+    elif sort_by == "First author":
+        filtered.sort(key=lambda x: str(x.get("authors", "")).lower())
+    elif sort_by == "Journal":
+        filtered.sort(key=lambda x: str(x.get("journal", "")).lower())
 
+    # Render Results
     if not filtered:
-        st.warning("No records matched your active sidebar filters.")
+        st.warning("No records matched your active PubMed sidebar filters.")
     else:
         total_items = len(filtered)
         total_pages = math.ceil(total_items / items_per_page)
@@ -227,6 +338,11 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
         st.caption(f"Showing {start_idx + 1}-{min(end_idx, total_items)} of {total_items} results (Page {st.session_state.page} of {total_pages})")
 
         for rec in page_items:
+            # Display Options Logic
+            if display_format == "PMID":
+                st.write(f"PMID: {rec['pmid']}")
+                continue
+
             meta_line = f"{rec.get('journal', 'N/A')} · {rec.get('year', 'N/A')} · PMID: {rec['pmid']}"
             badges = "".join([f'<span class="badge">{pt}</span>' for pt in rec.get("publication_types", [])[:3]])
 
@@ -240,15 +356,15 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
                 unsafe_allow_html=True
             )
 
-            if display_mode == "Summary View":
+            if display_format == "Summary":
                 abstract = rec.get("abstract", "")
                 preview = (abstract[:280] + "...") if len(abstract) > 280 else abstract
                 st.markdown(f'<p class="result-abstract">{preview}</p></div>', unsafe_allow_html=True)
 
-            elif display_mode == "Full Abstract":
+            elif display_format == "Abstract":
                 st.markdown(f'<p class="result-abstract">{rec.get("abstract")}</p></div>', unsafe_allow_html=True)
 
-            elif display_mode == "PubMed Inspection Mode":
+            elif display_format == "PubMed (Inspection Mode)":
                 st.markdown(f'<p class="result-abstract">{rec.get("abstract")}</p>', unsafe_allow_html=True)
                 
                 with st.expander("📋 Detailed PubMed Metadata & Relations"):
@@ -261,17 +377,18 @@ if (search_clicked or "last_results" in st.session_state) and query.strip():
                         st.write("**Related Resources:**", f"[Similar Articles on PubMed](https://pubmed.ncbi.nlm.nih.gov/?linkname=pubmed_pubmed&from_uid={rec['pmid']})")
                 st.markdown("</div>", unsafe_allow_html=True)
 
-        # Pagination controls
-        col_prev, col_center, col_next = st.columns([1, 3, 1])
-        with col_prev:
-            if st.session_state.page > 1:
-                if st.button("← Previous"):
-                    st.session_state.page -= 1
-                    st.rerun()
-        with col_center:
-            st.markdown(f"<div style='text-align:center;'>Page {st.session_state.page} of {total_pages}</div>", unsafe_allow_html=True)
-        with col_next:
-            if st.session_state.page < total_pages:
-                if st.button("Next →"):
-                    st.session_state.page += 1
-                    st.rerun()
+        # Pagination Controls
+        if display_format != "PMID" and total_pages > 1:
+            col_prev, col_center, col_next = st.columns([1, 3, 1])
+            with col_prev:
+                if st.session_state.page > 1:
+                    if st.button("← Previous"):
+                        st.session_state.page -= 1
+                        st.rerun()
+            with col_center:
+                st.markdown(f"<div style='text-align:center;'>Page {st.session_state.page} of {total_pages}</div>", unsafe_allow_html=True)
+            with col_next:
+                if st.session_state.page < total_pages:
+                    if st.button("Next →"):
+                        st.session_state.page += 1
+                        st.rerun()
